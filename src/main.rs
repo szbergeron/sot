@@ -9,6 +9,8 @@ struct DataPoint {
     wattage: f64,
 }
 
+const DO_IO: bool = false;
+
 fn run() {
     //let mut running = std::collections::VecDeque::new();
     //let mut sot_secs = load();
@@ -22,12 +24,13 @@ fn run() {
         let w = watts();
         //running.push_back(DataPoint { wattage: amps() * volts() });
 
-        let sleep_time = 2;
+        let sleep_time = 60.0;
+        //let sleep_time = 1.0;
         let sleep_hysterisis = 1.0;
         let pre_sleep_duration = current_counter.elapsed();
 
         let pre_sleep = std::time::Instant::now();
-        std::thread::sleep(std::time::Duration::from_secs(sleep_time));
+        std::thread::sleep(std::time::Duration::from_secs_f64(sleep_time));
         //let post_sleep = std::time::Instant::now();
         
 
@@ -50,30 +53,39 @@ fn run() {
         //println!("\rsot secs: {}                      ", sot_secs + current_counter.elapsed().as_secs_f64());
         std::io::stdout().flush().unwrap();
 
-        if write_mod == 0 {
-            write_mod = write_period;
-            let time = (sot_secs + current_counter.elapsed().as_secs_f64()) as u64;
-            let hours = time / (60 * 60);
-            let minutes = (time / 60) % 60;
-            //let seconds = time - minutes * 60 - hours * 60 * 60;
-            let seconds = time % 60;
-            let contents = format!("Current SOT secs is {} which comes to {}:{}:{} | {}\n",
-                                   time, hours, minutes, seconds, w);
-            write_sot(contents);
+        println!("Drawing {} watts", w);
 
-            let mut file = File::create("/home/sawyer/oss/sot/save.txt").unwrap();
-            let contents = format!("{} {}", time, last_capacity);
-            file.write_all(contents.as_bytes()).unwrap();
+        if DO_IO {
+            if write_mod == 0 {
+                write_mod = write_period;
+                let time = (sot_secs + current_counter.elapsed().as_secs_f64()) as u64;
+                let hours = time / (60 * 60);
+                let minutes = (time / 60) % 60;
+                //let seconds = time - minutes * 60 - hours * 60 * 60;
+                let seconds = time % 60;
+                let contents = format!("Current SOT secs is {} which comes to {}:{}:{} | {}\n",
+                                       time, hours, minutes, seconds, w);
+                write_sot(contents);
+
+                if DO_IO {
+                    let mut file = File::create("/home/sawyer/oss/sot/save.txt").unwrap();
+                    let contents = format!("{} {}", time, last_capacity);
+                    file.write_all(contents.as_bytes()).unwrap();
+                }
+            }
+            write_mod -= 1;
         }
-        write_mod -= 1;
 
     }
 }
 
 fn write_sot(line: String) {
-        //let mut file = File::create("sot.txt").unwrap();
-        let mut file = OpenOptions::new().write(true).append(true).open("/home/sawyer/oss/sot/sot.txt").expect("expected sot file");
-        file.write_all(line.as_bytes()).unwrap();
+        println!("L: {}", line);
+        //let mut file = File::create("/home/sawyer/oss/sot/sot.txt").unwrap();
+        if DO_IO {
+            let mut file = OpenOptions::new().write(true).append(true).open("/home/sawyer/oss/sot/sot.txt").expect("expected sot file");
+            file.write_all(line.as_bytes()).unwrap();
+        }
 }
 
 fn load() -> (f64, u64) {
@@ -101,12 +113,16 @@ fn load() -> (f64, u64) {
 }
 
 fn check_reset() -> bool {
-    let path = Path::new("/home/sawyer/oss/sot/reset");
-    if path.exists() {
-        let _ = fs::remove_file(path);
-        true
-    } else if !discharging() {
-        true
+    if DO_IO {
+        let path = Path::new("/home/sawyer/oss/sot/reset");
+        if path.exists() {
+            let _ = fs::remove_file(path);
+            true
+        } else if !discharging() {
+            true
+        } else {
+            false
+        }
     } else {
         false
     }
@@ -154,12 +170,14 @@ fn volts() -> f64 {
 
 fn charge() -> u64 {
     let mut v = 0;
-    if let Ok(contents) = fs::read_to_string("/sys/class/power_supply/BAT0/capacity") {
-        //println!("contents: {}", contents);
-        for word in contents.split_whitespace() {
-            if let Ok(u) = word.parse() {
-                v = u;
-                //println!("volts is {}", s);
+    if DO_IO {
+        if let Ok(contents) = fs::read_to_string("/sys/class/power_supply/BAT0/capacity") {
+            //println!("contents: {}", contents);
+            for word in contents.split_whitespace() {
+                if let Ok(u) = word.parse() {
+                    v = u;
+                    //println!("volts is {}", s);
+                }
             }
         }
     }
